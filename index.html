@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>MD 网页模拟器 · 自定义按键与连发</title>
+<style>
+  :root {
+    --bg: #080a0f;
+    --panel: rgba(17, 21, 30, 0.86);
+    --panel-solid: #11151e;
+    --panel-raised: #171c28;
+    --line: rgba(137, 151, 178, 0.18);
+    --line-strong: rgba(137, 151, 178, 0.32);
+    --text: #eef2fa;
+    --muted: #9199ab;
+    --muted-2: #6d7689;
+    --accent: #ff3b6b;
+    --accent-soft: rgba(255, 59, 107, 0.16);
+    --cyan: #2dd4bf;
+    --green: #35d48a;
+    --amber: #f4b740;
+    --red: #ff5a70;
+    --radius: 18px;
+    --mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { min-width: 320px; background: var(--bg); }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: var(--sans);
+    background:
+      radial-gradient(1100px 560px at 8% -10%, rgba(255, 59, 107, 0.14), transparent 62%),
+      radial-gradient(900px 600px at 102% -4%, rgba(45, 212, 191, 0.10), transparent 58%),
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+      var(--bg);
+    background-size: auto, auto, 38px 38px, 38px 38px, auto;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, input { font: inherit; }
+  button { color: inherit; }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  [hidden] { display: none !important; }
+
+  :focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
+  .app {
+    width: min(1480px, 100%);
+    margin: 0 auto;
+    padding: 22px clamp(14px, 2.2vw, 34px) 26px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    flex: 0 0 auto;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02)),
+      linear-gradient(145deg, #ff3b6b, #b51d44);
+    box-shadow: 0 14px 34px rgba(255, 59, 107, 0.24), inset 0 1px 0 rgba(255,255,255,0.28);
+    font-family: var(--mono);
+    font-size: 19px;
+    font-weight: 800;
+    font-style: italic;
+    letter-spacing: -0.08em;
+    color: #fff;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.22);
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: clamp(18px, 2vw, 24px);
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+  }
+
+  .brand p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(17, 21, 30, 0.72);
+    color: var(--muted);
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 4px rgba(145, 153, 171, 0.10);
+  }
+
+  .status.is-loading { color: var(--amber); border-color: rgba(244,183,64,0.32); }
+  .status.is-running { color: var(--green); border-color: rgba(53,212,138,0.34); }
+  .status.is-running .status-dot { box-shadow: 0 0 0 4px rgba(53,212,138,0.12), 0 0 12px rgba(53,212,138,0.7); }
+  .status.is-error { color: var(--red); border-color: rgba(255,90,112,0.36); }
+
+  .protocol-note {
+    margin: -2px 0 16px;
+    padding: 10px 13px;
+    border: 1px solid rgba(244,183,64,0.24);
+    border-radius: 12px;
+    background: rgba(244,183,64,0.07);
+    color: #d8c08a;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+
+  .protocol-note strong { color: #ffe0a0; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 372px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .stage-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: rgba(13, 17, 24, 0.84);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .stage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 54px;
+    padding: 10px 14px 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.035), transparent);
+  }
+
+  .file-meta {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  .file-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(255,59,107,0.8);
+  }
+
+  .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #dce3f1;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .file-size {
+    flex: 0 0 auto;
+    color: var(--muted-2);
+    font-family: var(--mono);
+    font-size: 11.5px;
+  }
+
+  .ext-badge {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .stage-head-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .stage-idle-label {
+    color: var(--muted-2);
+    font-size: 12px;
+  }
+
+  .ghost-btn, .text-btn, .danger-btn {
+    border: 1px solid var(--line);
+    cursor: pointer;
+  }
+
+  .ghost-btn {
+    min-height: 32px;
+    padding: 5px 11px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.035);
+    color: #c6cddd;
+    font-size: 12px;
+    transition: border-color .16s ease, background .16s ease, color .16s ease;
+  }
+
+  .ghost-btn:hover {
+    border-color: var(--line-strong);
+    background: rgba(255,255,255,0.065);
+    color: #fff;
+  }
+
+  .ghost-btn:active { transform: translateY(1px); }
+
+  .stage-body {
+    position: relative;
+    display: grid;
+    place-items: stretch;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    min-height: 340px;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at center, #101622 0%, #06080c 70%);
+  }
+
+  .drop-area {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 18px;
+    padding: 26px;
+    border: 1px dashed rgba(137,151,178,0.30);
+    border-radius: 14px;
+    background:
+      radial-gradient(ellipse at center, rgba(255,59,107,0.055), transparent 62%),
+      rgba(255,255,255,0.014);
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .18s ease, background .18s ease, transform .18s ease;
+  }
+
+  .drop-area:hover,
+  .drop-area:focus-visible,
+  .drop-area.is-drag {
+    border-color: rgba(255, 59, 107, 0.58);
+    background:
+      radial-gradient(ellipse at center, rgba(255,59,107,0.11), transparent 64%),
+      rgba(255,255,255,0.025);
+  }
+
+  .drop-area.is-drag { transform: scale(0.995); }
+
+  .cart-icon {
+    display: grid;
+    place-items: center;
+    width: 76px;
+    height: 76px;
+    margin-bottom: 2px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background:
+      linear-gradient(150deg, rgba(255,255,255,0.10), rgba(255,255,255,0.015)),
+      #161c27;
+    box-shadow: 0 18px 44px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.10);
+    color: #dbe3f3;
+  }
+
+  .cart-icon svg { width: 40px; height: 40px; }
+
+  .drop-area h2 {
+    margin: 2px 0 0;
+    font-size: clamp(18px, 2vw, 23px);
+    letter-spacing: 0.01em;
+  }
+
+  .drop-sub {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .formats {
+    margin: 2px 0 4px;
+    color: #c7cfdf;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+  }
+
+  .select-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    margin-top: 4px;
+    padding: 8px 18px;
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 10px;
+    background: linear-gradient(180deg, #ff4c78, #dc2953);
+    box-shadow: 0 12px 26px rgba(255,59,107,0.24), inset 0 1px 0 rgba(255,255,255,0.28);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+
+  .drop-area:hover .select-btn {
+    filter: brightness(1.06);
+  }
+
+  .privacy {
+    margin: 2px 0 0;
+    color: var(--muted-2);
+    font-size: 11.5px;
+  }
+
+  .game-root {
+    width: 100%;
+    height: 100%;
+    min-height: 340px;
+    background: #000;
+  }
+
+  .game-root.ejs_parent { height: 100%; }
+
+  .stage-error {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(4, 6, 10, 0.84);
+    backdrop-filter: blur(8px);
+    z-index: 20;
+  }
+
+  .error-card {
+    width: min(480px, 100%);
+    padding: 24px;
+    border: 1px solid rgba(255,90,112,0.34);
+    border-radius: 16px;
+    background: #131821;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.48);
+    text-align: center;
+  }
+
+  .error-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 12px;
+    border-radius: 12px;
+    background: rgba(255,90,112,0.13);
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  .error-card h3 { margin: 0 0 8px; font-size: 17px; }
+  .error-card p {
+    margin: 0 0 18px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .stage-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 42px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted-2);
+    font-size: 11.5px;
+  }
+
+  .stage-hint {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .foot-sep { opacity: 0.5; }
+
+  .panel-card {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.035);
+  }
+
+  .panel-section {
+    padding: 18px 18px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel-section:last-child { border-bottom: 0; }
+
+  .section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .section-head h2 {
+    margin: 0;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+  }
+
+  .section-head p {
+    margin: 4px 0 0;
+    color: var(--muted-2);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .text-btn {
+    flex: 0 0 auto;
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11.5px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .text-btn:hover { color: var(--text); }
+
+  .binding-groups { display: grid; gap: 12px; }
+
+  .binding-group-title {
+    margin: 0 0 4px;
+    color: var(--muted-2);
+    font-size: 10.5px;
+    font-weight: 650;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  .binding-row {
+    display: grid;
+    grid-template-columns: 36px minmax(68px, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    border-bottom: 1px solid rgba(137,151,178,0.10);
+  }
+
+  .binding-row:last-child { border-bottom: 0; }
+
+  .action-tag {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 24px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.028);
+    color: #cdd5e5;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .key-chip {
+    width: 100%;
+    min-height: 29px;
+    padding: 4px 9px;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    background: #0d1119;
+    color: #dbe5f5;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color .14s ease, background .14s ease, color .14s ease, transform .08s ease;
+  }
+
+  .key-chip:hover {
+    border-color: rgba(45,212,191,0.55);
+    background: #101722;
+  }
+
+  .key-chip.is-down {
+    border-color: rgba(255,59,107,0.72);
+    background: rgba(255,59,107,0.16);
+    color: #fff;
+    transform: translateY(1px);
+    box-shadow: 0 0 0 3px rgba(255,59,107,0.08);
+  }
+
+  .key-chip.has-turbo {
+    border-style: dashed;
+    border-color: rgba(255,59,107,0.44);
+  }
+
+  .turbo-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 58px;
+    color: var(--muted-2);
+    font-size: 10.5px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .turbo-toggle input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .switch-track {
+    position: relative;
+    width: 27px;
+    height: 16px;
+    flex: 0 0 auto;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: #0c1017;
+    transition: background .16s ease, border-color .16s ease;
+  }
+
+  .switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #7e879a;
+    transition: transform .16s ease, background .16s ease;
+  }
+
+  .turbo-toggle input:checked + .switch-track {
+    border-color: rgba(255,59,107,0.6);
+    background: rgba(255,59,107,0.22);
+  }
+
+  .turbo-toggle input:checked + .switch-track::after {
+    transform: translateX(11px);
+    background: var(--accent);
+  }
+
+  .turbo-toggle input:focus-visible + .switch-track {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
+  .turbo-toggle:hover { color: #c7cfdd; }
+
+  .turbo-na {
+    min-width: 58px;
+    color: rgba(109,118,137,0.42);
+    font-size: 10.5px;
+    text-align: right;
+  }
+
+  .freq-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 2px;
+  }
+
+  .freq-row label {
+    color: #cdd5e3;
+    font-size: 12px;
+  }
+
+  .freq-row output {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  #freqRange {
+    width: 100%;
+    margin: 10px 0 2px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .freq-scale {
+    display: flex;
+    justify-content: space-between;
+    color: var(--muted-2);
+    font-family: var(--mono);
+    font-size: 9.5px;
+  }
+
+  .fineprint {
+    margin: 10px 0 0;
+    color: var(--muted-2);
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .turbo-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 0;
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+
+  .turbo-state.is-on {
+    border-color: rgba(255,59,107,0.30);
+    background: var(--accent-soft);
+    color: #ff9cb4;
+  }
+
+  .help ul {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .help li {
+    position: relative;
+    padding-left: 13px;
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+
+  .help li::before {
+    content: "";
+    position: absolute;
+    top: 0.66em;
+    left: 0;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: rgba(45,212,191,0.65);
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 18px;
+    padding: 0 2px;
+    color: var(--muted-2);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .footer-right { text-align: right; }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 4, 7, 0.72);
+    backdrop-filter: blur(8px);
+  }
+
+  .modal-card {
+    position: relative;
+    width: min(380px, 100%);
+    padding: 24px;
+    border: 1px solid var(--line-strong);
+    border-radius: 16px;
+    background: #121721;
+    box-shadow: 0 30px 90px rgba(0,0,0,0.56);
+    text-align: center;
+    outline: none;
+  }
+
+  .modal-card h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+  }
+
+  .modal-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  .modal-card p strong { color: var(--text); }
+
+  .key-wait {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 58px;
+    margin: 18px 0 12px;
+    padding: 12px;
+    border: 1px dashed rgba(45,212,191,0.40);
+    border-radius: 10px;
+    background: rgba(45,212,191,0.055);
+    color: #bceee7;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+
+  .key-wait::after {
+    content: "";
+    width: 5px;
+    height: 5px;
+    margin-left: 5px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: blink 1s steps(2, start) infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .modal-tip {
+    margin-bottom: 16px !important;
+    color: var(--muted-2) !important;
+    font-size: 11px !important;
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 120;
+    transform: translateX(-50%);
+    max-width: min(440px, calc(100vw - 32px));
+    padding: 9px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: #171d28;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.4);
+    color: #dfe7f5;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  @media (min-width: 1000px) {
+    .panel-card {
+      position: sticky;
+      top: 18px;
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+    }
+  }
+
+  @media (max-width: 999px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .panel-card { order: 2; }
+    .stage-card { order: 1; }
+  }
+
+  @media (max-width: 620px) {
+    .app { padding-top: 14px; }
+    .topbar { align-items: flex-start; }
+    .brand-mark { width: 44px; height: 44px; border-radius: 12px; font-size: 17px; }
+    .brand p { display: none; }
+    .status { min-height: 30px; padding: 5px 10px; }
+    .stage-body { aspect-ratio: 4 / 3; min-height: 250px; }
+    .game-root { min-height: 250px; }
+    .drop-area { margin: 10px; padding: 18px 14px; gap: 8px; }
+    .cart-icon { width: 58px; height: 58px; border-radius: 16px; }
+    .cart-icon svg { width: 30px; height: 30px; }
+    .drop-sub { font-size: 12px; }
+    .stage-foot { padding: 7px 12px; }
+    .stage-foot .foot-extra { display: none; }
+    .panel-section { padding: 16px 15px 18px; }
+    .footer { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .footer-right { text-align: left; }
+    .ext-badge { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">MD</div>
+      <div>
+        <h1>Mega Drive 网页模拟器</h1>
+        <p>本地 ROM · 自定义键位 · 可调连发频率</p>
+      </div>
+    </div>
+    <div id="statusPill" class="status is-idle" role="status" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="statusText">等待 ROM</span>
+    </div>
+  </header>
+
+  <div id="protocolNote" class="protocol-note" hidden>
+    当前通过 <strong>file://</strong> 直接打开页面，模拟器资源会尝试从 CDN 加载。
+    如果画面一直停在加载状态，请关闭此页并双击 <strong>start.bat</strong>，改用本地内核。
+  </div>
+
+  <main class="layout">
+    <section class="stage-card" aria-label="游戏画面">
+      <div class="stage-head">
+        <div id="fileMeta" class="file-meta" hidden>
+          <span class="file-dot" aria-hidden="true"></span>
+          <span id="fileName" class="file-name"></span>
+          <span id="fileSize" class="file-size"></span>
+          <span id="fileExt" class="ext-badge"></span>
+        </div>
+        <span id="stageIdleLabel" class="stage-idle-label">尚未载入游戏</span>
+        <div id="stageActions" class="stage-head-right" hidden>
+          <button id="changeRom" type="button" class="ghost-btn">换 ROM</button>
+        </div>
+      </div>
+
+      <div class="stage-body">
+        <div id="dropArea" class="drop-area" tabindex="0" role="button" aria-label="选择或拖入世嘉 MD ROM 文件">
+          <div class="cart-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none">
+              <path d="M11 9h26a3 3 0 0 1 3 3v21a3 3 0 0 1-3 3H11a3 3 0 0 1-3-3V12a3 3 0 0 1 3-3Z" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 15h32M16 23h16M16 29h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M15 9v6M33 9v6" stroke="currentColor" stroke-width="2" opacity=".55"/>
+            </svg>
+          </div>
+          <h2>选择或拖入 ROM</h2>
+          <p class="drop-sub">选择文件后立即开始运行</p>
+          <p class="formats">.md · .gen · .bin · .smd · .zip · .7z</p>
+          <span class="select-btn">选择 ROM 文件</span>
+          <p class="privacy">ROM 只在本机浏览器读取，不会上传</p>
+          <input id="romInput" type="file" accept=".md,.gen,.bin,.smd,.zip,.7z" hidden>
+        </div>
+
+        <div id="game" class="game-root" tabindex="-1" hidden></div>
+
+        <div id="stageError" class="stage-error" hidden>
+          <div class="error-card">
+            <div class="error-icon" aria-hidden="true">!</div>
+            <h3>模拟器未能启动</h3>
+            <p id="stageErrorText"></p>
+            <button id="reloadBtn" type="button" class="ghost-btn">重新加载页面</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage-foot">
+        <span id="stageHint" class="stage-hint">选择 ROM 文件后会自动开始运行</span>
+        <span class="foot-extra">建议使用 Chrome / Edge <span class="foot-sep">·</span> 文件不会上传</span>
+      </div>
+    </section>
+
+    <aside class="panel-card" aria-label="控制设置">
+      <section class="panel-section">
+        <div class="section-head">
+          <div>
+            <h2>按键设置</h2>
+            <p>点击键位，再按下新的按键</p>
+          </div>
+          <button id="resetSettings" type="button" class="text-btn">恢复默认</button>
+        </div>
+        <div id="bindingGroups" class="binding-groups"></div>
+      </section>
+
+      <section class="panel-section">
+        <div class="section-head">
+          <div>
+            <h2>连发 / Turbo</h2>
+            <p>开启后按住对应按键会自动重复触发</p>
+          </div>
+        </div>
+        <div class="freq-row">
+          <label for="freqRange">触发频率</label>
+          <output id="freqValue" for="freqRange">12 Hz</output>
+        </div>
+        <input id="freqRange" type="range" min="1" max="30" step="1" value="12">
+        <div class="freq-scale"><span>1 Hz</span><span>30 Hz</span></div>
+        <p id="turboState" class="turbo-state">未开启连发</p>
+        <p class="fineprint">建议 10–20 Hz。频率越高按键越密集；实际触发还会受游戏帧率影响。</p>
+      </section>
+
+      <section class="panel-section help">
+        <h2>使用说明</h2>
+        <ul style="margin-top:10px">
+          <li>支持世嘉 MD / Genesis 卡带格式；暂不支持 Sega CD、32X。</li>
+          <li>方向键默认用于游戏，运行时会阻止页面滚动。</li>
+          <li>新按键若与现有键位冲突，会自动交换两个键位。</li>
+          <li>设置会自动保存在当前浏览器中。</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>本地运行，不上传 ROM。基于 <a href="https://github.com/EmulatorJS/EmulatorJS" target="_blank" rel="noreferrer">EmulatorJS</a> / Genesis Plus GX。</span>
+    <span class="footer-right">按键与连发由页面接管 · 核心版本 4.2.3</span>
+  </footer>
+</div>
+
+<div id="bindModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close-modal></div>
+  <div id="bindModalCard" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bindTitle" tabindex="-1">
+    <h3 id="bindTitle">设置按键</h3>
+    <p>为 <strong id="bindActionName"></strong> 按下新按键</p>
+    <div class="key-wait">等待输入</div>
+    <p class="modal-tip">按 Esc 取消 · 冲突键位会自动交换</p>
+    <button id="cancelBind" type="button" class="ghost-btn">取消</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+
+  const ACTIONS = [
+    { id: "up",    tag: "↑",  name: "上",    group: "dpad",   retroId: 4,  turbo: false, defaultCode: "ArrowUp" },
+    { id: "down",  tag: "↓",  name: "下",    group: "dpad",   retroId: 5,  turbo: false, defaultCode: "ArrowDown" },
+    { id: "left",  tag: "←",  name: "左",    group: "dpad",   retroId: 6,  turbo: false, defaultCode: "ArrowLeft" },
+    { id: "right", tag: "→",  name: "右",    group: "dpad",   retroId: 7,  turbo: false, defaultCode: "ArrowRight" },
+    { id: "a",     tag: "A",  name: "A",     group: "face",   retroId: 1,  turbo: true,  defaultCode: "KeyZ" },
+    { id: "b",     tag: "B",  name: "B",     group: "face",   retroId: 0,  turbo: true,  defaultCode: "KeyX" },
+    { id: "c",     tag: "C",  name: "C",     group: "face",   retroId: 8,  turbo: true,  defaultCode: "KeyC" },
+    { id: "x",     tag: "X",  name: "X",     group: "face",   retroId: 10, turbo: true,  defaultCode: "KeyA" },
+    { id: "y",     tag: "Y",  name: "Y",     group: "face",   retroId: 9,  turbo: true,  defaultCode: "KeyS" },
+    { id: "z",     tag: "Z",  name: "Z",     group: "face",   retroId: 11, turbo: true,  defaultCode: "KeyD" },
+    { id: "start", tag: "ST", name: "Start", group: "system", retroId: 3,  turbo: false, defaultCode: "Enter" },
+    { id: "mode",  tag: "MO", name: "Mode",  group: "system", retroId: 2,  turbo: false, defaultCode: "ShiftLeft" }
+  ];
+
+  const ACTION_MAP = Object.fromEntries(ACTIONS.map((action) => [action.id, action]));
+  const ACTION_ORDER = ACTIONS.map((action) => action.id);
+  const TURBO_IDS = ACTIONS.filter((action) => action.turbo).map((action) => action.id);
+  const TURBO_SET = new Set(TURBO_IDS);
+  const GROUPS = [
+    { id: "dpad", title: "方向键", actions: ["up", "down", "left", "right"] },
+    { id: "face", title: "动作键", actions: ["a", "b", "c", "x", "y", "z"] },
+    { id: "system", title: "系统键", actions: ["start", "mode"] }
+  ];
+  const DEFAULT_BINDINGS = Object.fromEntries(ACTIONS.map((action) => [action.id, action.defaultCode]));
+  const DEFAULT_TURBO = Object.fromEntries(TURBO_IDS.map((id) => [id, false]));
+  const DEFAULT_FREQUENCY = 12;
+  const STORAGE_KEY = "md-web-player-settings-v1";
+  const SUPPORTED_EXTENSIONS = new Set(["md", "gen", "bin", "smd", "zip", "7z"]);
+  const FALLBACK_CODES = [
+    "KeyF", "KeyG", "KeyH", "KeyJ", "KeyK", "KeyL", "KeyM", "KeyN", "KeyO", "KeyP",
+    "KeyQ", "KeyR", "KeyT", "KeyU", "KeyV", "KeyW", "KeyY",
+    "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9", "Digit0",
+    "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7", "Numpad8", "Numpad9", "Numpad0"
+  ];
+  const BLOCKED_BIND_CODES = new Set(["F5", "F11", "F12", "MetaLeft", "MetaRight", "ContextMenu"]);
+  const CDN_DATA_PATH = "https://cdn.emulatorjs.org/4.2.3/data/";
+  const LOCAL_DATA_PATH = "data/";
+
+  const ui = {
+    statusPill: document.getElementById("statusPill"),
+    statusText: document.getElementById("statusText"),
+    protocolNote: document.getElementById("protocolNote"),
+    dropArea: document.getElementById("dropArea"),
+    romInput: document.getElementById("romInput"),
+    game: document.getElementById("game"),
+    fileMeta: document.getElementById("fileMeta"),
+    stageIdleLabel: document.getElementById("stageIdleLabel"),
+    stageActions: document.getElementById("stageActions"),
+    fileName: document.getElementById("fileName"),
+    fileSize: document.getElementById("fileSize"),
+    fileExt: document.getElementById("fileExt"),
+    stageHint: document.getElementById("stageHint"),
+    stageError: document.getElementById("stageError"),
+    stageErrorText: document.getElementById("stageErrorText"),
+    reloadBtn: document.getElementById("reloadBtn"),
+    changeRom: document.getElementById("changeRom"),
+    bindingGroups: document.getElementById("bindingGroups"),
+    resetSettings: document.getElementById("resetSettings"),
+    freqRange: document.getElementById("freqRange"),
+    freqValue: document.getElementById("freqValue"),
+    turboState: document.getElementById("turboState"),
+    bindModal: document.getElementById("bindModal"),
+    bindModalCard: document.getElementById("bindModalCard"),
+    bindActionName: document.getElementById("bindActionName"),
+    cancelBind: document.getElementById("cancelBind"),
+    toast: document.getElementById("toast")
+  };
+
+  const state = {
+    settings: loadSettings(),
+    keyToAction: new Map(),
+    held: new Set(),
+    turboTimers: new Map(),
+    bindingAction: null,
+    started: false,
+    starting: false,
+    currentFile: null,
+    toastTimer: 0,
+    dragDepth: 0
+  };
+
+  function clampFrequency(value) {
+    if (value === null || value === undefined || value === "") return DEFAULT_FREQUENCY;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return DEFAULT_FREQUENCY;
+    return Math.min(30, Math.max(1, Math.round(number)));
+  }
+
+  function normalizeSettings(raw) {
+    const bindings = { ...DEFAULT_BINDINGS };
+    if (raw && raw.bindings && typeof raw.bindings === "object") {
+      for (const action of ACTIONS) {
+        const value = raw.bindings[action.id];
+        if (typeof value === "string" && value.length > 0) bindings[action.id] = value;
+      }
+    }
+
+    const used = new Set();
+    for (const actionId of ACTION_ORDER) {
+      let code = bindings[actionId];
+      if (!code || used.has(code)) {
+        code = DEFAULT_BINDINGS[actionId];
+        if (used.has(code)) code = FALLBACK_CODES.find((candidate) => !used.has(candidate));
+        if (!code) code = actionId;
+      }
+      used.add(code);
+      bindings[actionId] = code;
+    }
+
+    const turbo = { ...DEFAULT_TURBO };
+    if (raw && raw.turbo && typeof raw.turbo === "object") {
+      for (const id of TURBO_IDS) {
+        if (typeof raw.turbo[id] === "boolean") turbo[id] = raw.turbo[id];
+      }
+    }
+
+    return {
+      bindings,
+      turbo,
+      frequency: clampFrequency(raw && raw.frequency)
+    };
+  }
+
+  function loadSettings() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      return normalizeSettings(raw);
+    } catch (error) {
+      return normalizeSettings(null);
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.settings));
+    } catch (error) {
+      // Storage can be unavailable in private mode; the player still works in memory.
+    }
+  }
+
+  function rebuildKeyMap() {
+    state.keyToAction.clear();
+    for (const action of ACTIONS) {
+      state.keyToAction.set(state.settings.bindings[action.id], action.id);
+    }
+  }
+
+  function codeToLabel(code) {
+    if (!code) return "—";
+    const special = {
+      ArrowUp: "↑",
+      ArrowDown: "↓",
+      ArrowLeft: "←",
+      ArrowRight: "→",
+      Enter: "Enter",
+      NumpadEnter: "Num Enter",
+      Space: "Space",
+      ShiftLeft: "L Shift",
+      ShiftRight: "R Shift",
+      ControlLeft: "L Ctrl",
+      ControlRight: "R Ctrl",
+      AltLeft: "L Alt",
+      AltRight: "R Alt",
+      Backspace: "Backspace",
+      Tab: "Tab",
+      CapsLock: "Caps",
+      Escape: "Esc",
+      Minus: "-",
+      Equal: "=",
+      BracketLeft: "[",
+      BracketRight: "]",
+      Backslash: "\\",
+      Semicolon: ";",
+      Quote: "'",
+      Comma: ",",
+      Period: ".",
+      Slash: "/",
+      Backquote: "`"
+    };
+    if (special[code]) return special[code];
+    if (code.startsWith("Key")) return code.slice(3);
+    if (code.startsWith("Digit")) return code.slice(5);
+    if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+    if (code.startsWith("F") && /^F\d+$/.test(code)) return code;
+    return code.replace(/([a-z])([A-Z])/g, "$1 $2");
+  }
+
+  function isTurboEnabled(actionId) {
+    return TURBO_SET.has(actionId) && state.settings.turbo[actionId] === true;
+  }
+
+  function emitInput(actionId, value) {
+    const emulator = window.EJS_emulator;
+    if (!emulator || !emulator.gameManager || !emulator.started) return;
+    const action = ACTION_MAP[actionId];
+    if (!action) return;
+    try {
+      emulator.gameManager.simulateInput(0, action.retroId, value);
+    } catch (error) {
+      console.warn("[MD] Could not send input", error);
+    }
+  }
+
+  function setPressedVisual(actionId, pressed) {
+    const chip = ui.bindingGroups.querySelector('.key-chip[data-action="' + actionId + '"]');
+    if (chip) chip.classList.toggle("is-down", pressed);
+  }
+
+  function setChipTurboVisual(actionId) {
+    const chip = ui.bindingGroups.querySelector('.key-chip[data-action="' + actionId + '"]');
+    if (chip) chip.classList.toggle("has-turbo", isTurboEnabled(actionId));
+  }
+
+  function makeTurboTimer(actionId, initiallyPressed) {
+    let pressed = initiallyPressed;
+    const interval = 500 / state.settings.frequency;
+    const timer = window.setInterval(() => {
+      if (!state.started || !state.held.has(actionId) || !isTurboEnabled(actionId)) {
+        stopTurbo(actionId, true);
+        return;
+      }
+      pressed = !pressed;
+      emitInput(actionId, pressed ? 1 : 0);
+    }, interval);
+    return { timer, pressed };
+  }
+
+  function startTurbo(actionId, immediatePress) {
+    stopTurbo(actionId, false);
+    if (immediatePress) emitInput(actionId, 1);
+    state.turboTimers.set(actionId, makeTurboTimer(actionId, immediatePress));
+  }
+
+  function stopTurbo(actionId, release) {
+    const entry = state.turboTimers.get(actionId);
+    if (!entry) return;
+    window.clearInterval(entry.timer);
+    state.turboTimers.delete(actionId);
+    if (release) emitInput(actionId, 0);
+  }
+
+  function restartTurboTimers() {
+    for (const [actionId, entry] of Array.from(state.turboTimers.entries())) {
+      window.clearInterval(entry.timer);
+      state.turboTimers.set(actionId, makeTurboTimer(actionId, entry.pressed));
+    }
+  }
+
+  function releaseAction(actionId) {
+    state.held.delete(actionId);
+    if (state.turboTimers.has(actionId)) {
+      stopTurbo(actionId, true);
+    } else {
+      emitInput(actionId, 0);
+    }
+    setPressedVisual(actionId, false);
+  }
+
+  function releaseAllInputs() {
+    for (const actionId of Array.from(state.turboTimers.keys())) {
+      window.clearInterval(state.turboTimers.get(actionId).timer);
+      state.turboTimers.delete(actionId);
+    }
+    for (const actionId of Array.from(state.held)) {
+      emitInput(actionId, 0);
+      setPressedVisual(actionId, false);
+    }
+    state.held.clear();
+  }
+
+  function isEmulatorUiOpen() {
+    const emulator = window.EJS_emulator;
+    if (!emulator) return false;
+    try {
+      if (typeof emulator.isPopupOpen === "function" && emulator.isPopupOpen()) return true;
+      if (emulator.settingsMenuOpen) return true;
+      if (emulator.controlMenu && emulator.controlMenu.style.display !== "none") return true;
+    } catch (error) {
+      return false;
+    }
+    return false;
+  }
+
+  function shouldIgnoreGameKey(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return true;
+    if (target.closest("button, a")) {
+      return event.code === "Space" || event.code === "Enter" || event.code === "NumpadEnter";
+    }
+    return false;
+  }
+
+  function onKeyDown(event) {
+    if (state.bindingAction) {
+      handleBindingKey(event);
+      return;
+    }
+    if (!state.started) return;
+    if (event.repeat) {
+      const actionId = state.keyToAction.get(event.code);
+      if (actionId) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      return;
+    }
+    if (shouldIgnoreGameKey(event)) return;
+    if (isEmulatorUiOpen()) return;
+
+    const actionId = state.keyToAction.get(event.code);
+    if (!actionId) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (state.held.has(actionId)) return;
+
+    state.held.add(actionId);
+    setPressedVisual(actionId, true);
+
+    if (isTurboEnabled(actionId)) {
+      startTurbo(actionId, true);
+    } else {
+      emitInput(actionId, 1);
+    }
+  }
+
+  function onKeyUp(event) {
+    if (state.bindingAction) return;
+    const actionId = state.keyToAction.get(event.code);
+    if (!actionId || !state.held.has(actionId)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    releaseAction(actionId);
+  }
+
+  function handleBindingKey(event) {
+    if (!state.bindingAction) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.repeat) return;
+    if (event.code === "Escape") {
+      closeBindModal();
+      return;
+    }
+    if (!event.code || BLOCKED_BIND_CODES.has(event.code)) {
+      showToast("这个按键不能用于游戏");
+      return;
+    }
+    assignBinding(state.bindingAction, event.code);
+  }
+
+  function assignBinding(actionId, code) {
+    const action = ACTION_MAP[actionId];
+    if (!action) return;
+    const oldCode = state.settings.bindings[actionId];
+    const conflict = ACTIONS.find((candidate) => candidate.id !== actionId && state.settings.bindings[candidate.id] === code);
+    if (conflict) state.settings.bindings[conflict.id] = oldCode;
+    state.settings.bindings[actionId] = code;
+    rebuildKeyMap();
+    saveSettings();
+    renderBindings();
+    closeBindModal();
+    showToast("已将 " + action.name + " 绑定为 " + codeToLabel(code));
+  }
+
+  function openBindModal(actionId) {
+    if (state.bindingAction) return;
+    releaseAllInputs();
+    state.bindingAction = actionId;
+    const action = ACTION_MAP[actionId];
+    ui.bindActionName.textContent = action.name;
+    ui.bindModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    ui.bindModalCard.focus({ preventScroll: true });
+  }
+
+  function closeBindModal() {
+    if (!state.bindingAction) return;
+    state.bindingAction = null;
+    ui.bindModal.hidden = true;
+    document.body.style.overflow = "";
+    const focusTarget = state.started ? ui.game : ui.dropArea;
+    if (focusTarget) focusTarget.focus({ preventScroll: true });
+  }
+
+  function renderBindings() {
+    const fragment = document.createDocumentFragment();
+    for (const group of GROUPS) {
+      const groupEl = document.createElement("div");
+      groupEl.className = "binding-group";
+      const title = document.createElement("h3");
+      title.className = "binding-group-title";
+      title.textContent = group.title;
+      groupEl.appendChild(title);
+
+      for (const actionId of group.actions) {
+        const action = ACTION_MAP[actionId];
+        const row = document.createElement("div");
+        row.className = "binding-row";
+
+        const tag = document.createElement("span");
+        tag.className = "action-tag";
+        tag.textContent = action.tag;
+        tag.title = action.name;
+
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "key-chip";
+        chip.dataset.action = actionId;
+        chip.textContent = codeToLabel(state.settings.bindings[actionId]);
+        chip.title = "点击修改 " + action.name + " 的键位";
+        chip.setAttribute("aria-label", action.name + "，当前按键 " + codeToLabel(state.settings.bindings[actionId]) + "，点击修改");
+        if (state.held.has(actionId)) chip.classList.add("is-down");
+        if (isTurboEnabled(actionId)) chip.classList.add("has-turbo");
+        chip.addEventListener("click", () => openBindModal(actionId));
+
+        row.appendChild(tag);
+        row.appendChild(chip);
+
+        if (action.turbo) {
+          const label = document.createElement("label");
+          label.className = "turbo-toggle";
+          label.title = "开启后，按住 " + action.name + " 会自动连发";
+
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = isTurboEnabled(actionId);
+          input.dataset.turbo = actionId;
+          input.setAttribute("aria-label", action.name + " 连发");
+
+          const track = document.createElement("span");
+          track.className = "switch-track";
+
+          const text = document.createElement("span");
+          text.textContent = "连发";
+
+          input.addEventListener("change", () => setTurbo(actionId, input.checked));
+          label.appendChild(input);
+          label.appendChild(track);
+          label.appendChild(text);
+          row.appendChild(label);
+        } else {
+          const unavailable = document.createElement("span");
+          unavailable.className = "turbo-na";
+          unavailable.textContent = "—";
+          row.appendChild(unavailable);
+        }
+
+        groupEl.appendChild(row);
+      }
+      fragment.appendChild(groupEl);
+    }
+    ui.bindingGroups.replaceChildren(fragment);
+  }
+
+  function renderTurboState() {
+    const enabled = TURBO_IDS.filter((id) => isTurboEnabled(id)).map((id) => ACTION_MAP[id].name);
+    if (enabled.length === 0) {
+      ui.turboState.textContent = "未开启连发";
+      ui.turboState.classList.remove("is-on");
+      return;
+    }
+    ui.turboState.textContent = "已开启：" + enabled.join("、");
+    ui.turboState.classList.add("is-on");
+  }
+
+  function setFrequency(value) {
+    const frequency = clampFrequency(value);
+    state.settings.frequency = frequency;
+    ui.freqRange.value = String(frequency);
+    ui.freqValue.textContent = frequency + " Hz";
+    saveSettings();
+    restartTurboTimers();
+  }
+
+  function setTurbo(actionId, enabled) {
+    if (!TURBO_SET.has(actionId)) return;
+    state.settings.turbo[actionId] = Boolean(enabled);
+    saveSettings();
+    setChipTurboVisual(actionId);
+    renderTurboState();
+
+    if (state.held.has(actionId)) {
+      if (enabled) {
+        emitInput(actionId, 0);
+        startTurbo(actionId, true);
+      } else {
+        stopTurbo(actionId, true);
+        emitInput(actionId, 1);
+      }
+    }
+  }
+
+  function resetSettings() {
+    releaseAllInputs();
+    state.settings = normalizeSettings(null);
+    rebuildKeyMap();
+    renderBindings();
+    ui.freqRange.value = String(state.settings.frequency);
+    ui.freqValue.textContent = state.settings.frequency + " Hz";
+    renderTurboState();
+    saveSettings();
+    showToast("已恢复默认按键与连发设置");
+  }
+
+  function setStatus(kind, text) {
+    ui.statusPill.className = "status is-" + kind;
+    ui.statusText.textContent = text;
+  }
+
+  function showToast(message) {
+    window.clearTimeout(state.toastTimer);
+    ui.toast.textContent = message;
+    ui.toast.hidden = false;
+    state.toastTimer = window.setTimeout(() => {
+      ui.toast.hidden = true;
+    }, 2400);
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1024 / 1024).toFixed(2) + " MB";
+  }
+
+  function validateRom(file) {
+    if (!file) return "没有读取到文件。";
+    if (!file.size) return "这个文件是空的。";
+    const extension = file.name.split(".").pop().toLowerCase();
+    if (!SUPPORTED_EXTENSIONS.has(extension)) {
+      return "不支持这个文件格式。请选择 .md、.gen、.bin、.smd、.zip 或 .7z 文件。";
+    }
+    return "";
+  }
+
+  function showStartError(message) {
+    state.starting = false;
+    state.started = false;
+    setStatus("error", "加载失败");
+    ui.stageErrorText.textContent = message;
+    ui.stageError.hidden = false;
+    ui.stageHint.textContent = "加载失败，请检查资源或重新选择 ROM";
+    releaseAllInputs();
+  }
+
+  function makeBlankKeyboardControls() {
+    const gamepadDefaults = {
+      0: "BUTTON_2", 1: "BUTTON_4", 2: "SELECT", 3: "START",
+      4: "DPAD_UP", 5: "DPAD_DOWN", 6: "DPAD_LEFT", 7: "DPAD_RIGHT",
+      8: "BUTTON_1", 9: "BUTTON_3",
+      10: "LEFT_TOP_SHOULDER", 11: "RIGHT_TOP_SHOULDER",
+      12: "LEFT_BOTTOM_SHOULDER", 13: "RIGHT_BOTTOM_SHOULDER",
+      14: "LEFT_STICK", 15: "RIGHT_STICK",
+      16: "LEFT_STICK_X:+1", 17: "LEFT_STICK_X:-1",
+      18: "LEFT_STICK_Y:+1", 19: "LEFT_STICK_Y:-1",
+      20: "RIGHT_STICK_X:+1", 21: "RIGHT_STICK_X:-1",
+      22: "RIGHT_STICK_Y:+1", 23: "RIGHT_STICK_Y:-1"
+    };
+    const controls = { 0: {}, 1: {}, 2: {}, 3: {} };
+    for (let index = 0; index < 30; index++) {
+      const entry = { value: "" };
+      if (gamepadDefaults[index]) entry.value2 = gamepadDefaults[index];
+      controls[0][index] = entry;
+    }
+    return controls;
+  }
+
+  function disableBuiltInKeyboard() {
+    const emulator = window.EJS_emulator;
+    if (!emulator || !emulator.controls) return;
+    for (const player of Object.values(emulator.controls)) {
+      for (const control of Object.values(player || {})) {
+        if (control && typeof control === "object") control.value = 0;
+      }
+    }
+  }
+
+  function onGameStart() {
+    state.started = true;
+    state.starting = false;
+    disableBuiltInKeyboard();
+    ui.stageError.hidden = true;
+    setStatus("running", "运行中");
+    ui.stageHint.textContent = "运行中 · 点击画面后即可使用键盘";
+    ui.dropArea.hidden = true;
+    ui.game.hidden = false;
+    ui.fileMeta.hidden = false;
+    ui.stageActions.hidden = false;
+    ui.stageIdleLabel.hidden = true;
+    ui.game.focus({ preventScroll: true });
+  }
+
+  function startEmulator(file) {
+    const useCdn = window.location.protocol === "file:";
+    const dataPath = useCdn ? CDN_DATA_PATH : LOCAL_DATA_PATH;
+
+    window.EJS_player = "#game";
+    window.EJS_core = "segaMD";
+    window.EJS_gameUrl = file;
+    window.EJS_gameName = file.name;
+    window.EJS_gameID = 1;
+    window.EJS_pathtodata = dataPath;
+    window.EJS_startOnLoaded = true;
+    window.EJS_defaultControls = makeBlankKeyboardControls();
+    window.EJS_volume = 0.7;
+    window.EJS_language = "zh-CN";
+    window.EJS_backgroundColor = "#05070b";
+    window.EJS_color = "#ff3b6b";
+    window.EJS_DEBUG_XX = !useCdn;
+    window.EJS_Buttons = {
+      gamepad: false,
+      cheat: false,
+      netplay: false,
+      cacheManager: false,
+      screenRecord: false,
+      saveSavFiles: false,
+      loadSavFiles: false,
+      diskButton: false,
+      exitEmulation: false,
+      contextMenu: false
+    };
+    window.EJS_ready = () => {
+      if (!state.started) setStatus("loading", "加载核心");
+    };
+    window.EJS_onGameStart = onGameStart;
+    window.EJS_onExit = () => {
+      state.started = false;
+      state.starting = false;
+      setStatus("idle", "等待 ROM");
+      releaseAllInputs();
+    };
+
+    const loader = document.createElement("script");
+    loader.src = dataPath + "loader.js";
+    loader.async = true;
+    loader.onerror = () => {
+      showStartError(useCdn
+        ? "无法从 CDN 加载模拟器。请关闭此页并双击 start.bat，使用项目内的本地内核。"
+        : "无法加载 data/loader.js。请确认 data 文件夹完整，并通过 start.bat 启动本地服务器。");
+    };
+    document.head.appendChild(loader);
+  }
+
+  function beginGame(file) {
+    if (state.starting) return;
+    const error = validateRom(file);
+    if (error) {
+      showToast(error);
+      return;
+    }
+
+    releaseAllInputs();
+    state.currentFile = file;
+    state.starting = true;
+    state.started = false;
+
+    const extension = file.name.split(".").pop().toUpperCase();
+    ui.fileName.textContent = file.name;
+    ui.fileSize.textContent = formatBytes(file.size);
+    ui.fileExt.textContent = extension;
+    ui.fileMeta.hidden = false;
+    ui.stageIdleLabel.hidden = true;
+    ui.stageActions.hidden = false;
+    ui.stageError.hidden = true;
+    ui.dropArea.hidden = true;
+    ui.game.hidden = false;
+    ui.stageHint.textContent = "正在加载模拟器…";
+    ui.changeRom.disabled = true;
+    setStatus("loading", "启动中");
+
+    startEmulator(file);
+  }
+
+  function openFilePicker() {
+    if (state.starting) return;
+    ui.romInput.value = "";
+    ui.romInput.click();
+  }
+
+  function onFilesDropped(files) {
+    if (!files || !files.length) return;
+    if (state.starting) return;
+    beginGame(files[0]);
+  }
+
+  ui.romInput.addEventListener("change", () => {
+    const file = ui.romInput.files && ui.romInput.files[0];
+    if (file) beginGame(file);
+    ui.romInput.value = "";
+  });
+
+  ui.dropArea.addEventListener("click", openFilePicker);
+  ui.dropArea.addEventListener("keydown", (event) => {
+    if (event.code === "Enter" || event.code === "Space") {
+      event.preventDefault();
+      openFilePicker();
+    }
+  });
+
+  window.addEventListener("dragenter", (event) => {
+    if (!event.dataTransfer) return;
+    event.preventDefault();
+    state.dragDepth++;
+    if (!state.starting) ui.dropArea.classList.add("is-drag");
+  });
+
+  window.addEventListener("dragover", (event) => {
+    if (event.dataTransfer) event.preventDefault();
+  });
+
+  window.addEventListener("dragleave", (event) => {
+    if (!event.dataTransfer) return;
+    state.dragDepth = Math.max(0, state.dragDepth - 1);
+    if (state.dragDepth === 0) ui.dropArea.classList.remove("is-drag");
+  });
+
+  window.addEventListener("drop", (event) => {
+    if (!event.dataTransfer) return;
+    event.preventDefault();
+    state.dragDepth = 0;
+    ui.dropArea.classList.remove("is-drag");
+    if (state.starting) return;
+    onFilesDropped(event.dataTransfer.files);
+  });
+
+  ui.changeRom.addEventListener("click", () => {
+    if (state.started || state.starting) {
+      if (!window.confirm("更换 ROM 会重新加载页面，未保存的游戏进度将丢失。继续吗？")) return;
+    }
+    window.location.reload();
+  });
+
+  ui.reloadBtn.addEventListener("click", () => window.location.reload());
+  ui.resetSettings.addEventListener("click", resetSettings);
+  ui.cancelBind.addEventListener("click", closeBindModal);
+  ui.bindModal.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.hasAttribute("data-close-modal")) closeBindModal();
+  });
+
+  ui.freqRange.addEventListener("input", () => setFrequency(ui.freqRange.value));
+
+  window.addEventListener("keydown", onKeyDown, true);
+  window.addEventListener("keyup", onKeyUp, true);
+  window.addEventListener("blur", releaseAllInputs);
+  window.addEventListener("pagehide", releaseAllInputs);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") releaseAllInputs();
+  });
+
+  if (window.location.protocol === "file:") ui.protocolNote.hidden = false;
+
+  rebuildKeyMap();
+  renderBindings();
+  renderTurboState();
+  ui.freqRange.value = String(state.settings.frequency);
+  ui.freqValue.textContent = state.settings.frequency + " Hz";
+})();
+</script>
+</body>
+</html>
